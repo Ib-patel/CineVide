@@ -1,0 +1,192 @@
+// Cinevide database schema
+//
+// Design notes:
+// - Multi-valued fields (genres, cast, audio formats, subtitle languages) that are
+//   read-only catalog metadata are stored as JSON strings instead of fully
+//   relational tables. Genres get their own join table (`MediaGenre`) because they
+//   are a filterable/filtering dimension. Cast/audio/subtitles are display-only,
+//   so normalizing them would add joins without query benefits.
+// - Editorial ordering (trending rank, popularity, featured flag) lives on `Media`
+//   so rows can be sourced from the database instead of hardcoded arrays.
+// - `WatchProgress` targets either a movie (episodeId = null) or a single episode.
+//   PostgreSQL unique constraints treat NULLs as distinct, so movie rows are
+//   upserted with findFirst in the service layer guard against duplicates.
+// - Sessions store only a SHA-256 hash of the cookie token; a leaked DB dump
+//   cannot mint sessions.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MediaType {
+  MOVIE
+  SERIES
+}
+
+enum Availability {
+  AVAILABLE
+  COMING_SOON
+  METADATA_ONLY
+  REGION_RESTRICTED
+  SUBSCRIPTION_REQUIRED
+  UNAVAILABLE
+}
+
+model User {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  sessions     Session[]
+  watchlist    WatchlistItem[]
+  progress     WatchProgress[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Media {
+  id                  String          @id @default(cuid())
+  slug                String          @unique
+  title               String
+  tagline             String?
+  synopsis            String
+  type                MediaType
+  posterUrl           String
+  backdropUrl         String
+  releaseYear         Int
+  rating              Decimal         @db.Decimal(3, 1)
+  runtimeMinutes      Int?
+  ageRating           String
+  maxResolution       String
+  audioFormats        String          @default("[]")
+  subtitleLanguages   String          @default("[]")
+  castJson            String          @default("[]")
+  director            String
+  matchPercent        Int
+  isExclusive         Boolean         @default(false)
+  availability        Availability    @default(AVAILABLE)
+  trendingRank        Int?            @unique
+  popularity          Int?
+  isFeatured          Boolean         @default(false)
+  featuredOrder       Int?
+  demoPreviewUrl      String          @default("/videos/demo/demo-preview.mp4")
+  externalSource      String          @default("manual") // "manual" | "tmdb" | "omdb"
+  externalId          String?
+  imdbId              String?
+  syncedAt            DateTime?
+  metadataAttribution String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  genres         MediaGenre[]
+  seasons        Season[]
+  watchlistItems WatchlistItem[]
+  progressItems  WatchProgress[]
+  playbackAssets PlaybackAsset[]
+
+  @@index([type, rating])
+  @@index([trendingRank])
+  @@index([externalSource, externalId])
+}
+
+model MediaGenre {
+  mediaId String
+  genre   String
+  media   Media  @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([mediaId, genre])
+  @@index([genre])
+}
+
+model Season {
+  id           String    @id @default(cuid())
+  mediaId      String
+  seasonNumber Int
+  title        String
+  media        Media     @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  episodes     Episode[]
+
+  @@unique([mediaId, seasonNumber])
+}
+
+model Episode {
+  id              String          @id @default(cuid())
+  seasonId        String
+  episodeNumber   Int
+  title           String
+  description     String
+  durationMinutes Int
+  thumbnailUrl    String
+  season          Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  progress        WatchProgress[]
+  playbackAssets  PlaybackAsset[]
+
+  @@unique([seasonId, episodeNumber])
+}
+
+model PlaybackAsset {
+  id               String    @id @default(cuid())
+  mediaId          String
+  episodeId        String?
+  playbackProvider String    @default("demo") // "hls" | "mux" | "cloudflare" | "s3_cloudfront" | "demo"
+  streamUrl        String
+  licenseStart     DateTime?
+  licenseEnd       DateTime?
+  allowedRegions   String    @default("[\"GLOBAL\"]") // JSON array of country codes
+  isDrmProtected   Boolean   @default(false)
+  status           String    @default("ACTIVE") // "ACTIVE" | "EXPIRED" | "REVOKED"
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  media   Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  episode Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([mediaId, episodeId])
+  @@index([status])
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  mediaId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId])
+  @@index([userId])
+}
+
+model WatchProgress {
+  id              String   @id @default(cuid())
+  userId          String
+  mediaId         String
+  episodeId       String?
+  positionSeconds Int      @default(0)
+  durationSeconds Int      @default(0)
+  completed       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media   Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  episode Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}

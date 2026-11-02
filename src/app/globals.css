@@ -1,26 +1,67 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-night: #07070a;
+  --color-surface: #0e1017;
+  --color-elevated: #161922;
+  --color-card: #12141c;
+  --color-accent: #e50914;
+  --color-accent-hover: #f40612;
+  --color-gold: #f59e0b;
+  --color-hdr: #38bdf8;
+  --color-ink: #ffffff;
+  --color-muted: #9ca3af;
+  --color-subtle: #6b7280;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-outfit), var(--font-inter), ui-sans-serif, sans-serif;
+
+  --breakpoint-3xl: 1920px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
 
+@utility text-glow {
+  text-shadow: 0 2px 24px rgb(0 0 0 / 0.9), 0 1px 3px rgb(0 0 0 / 0.9);
+}
+
+@utility rank-stroke {
+  color: transparent;
+  -webkit-text-stroke: 3px rgba(156, 163, 175, 0.9);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-night);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: rgba(229, 9, 20, 0.7);
+  color: #ffffff;
+}
+
+img {
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
