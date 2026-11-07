@@ -2,23 +2,6 @@ import "server-only";
 import { z } from "zod";
 import { GENRE_VALUES } from "@/types";
 
-export const registerSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(80),
-  email: z.string().trim().email("Enter a valid email address").max(254),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .max(128)
-    .refine((val) => /[a-zA-Z]/.test(val) && /[0-9]/.test(val), {
-      message: "Password must contain at least one letter and one number",
-    }),
-});
-
-export const loginSchema = z.object({
-  email: z.string().trim().email("Enter a valid email address").max(254),
-  password: z.string().min(1, "Password is required").max(128),
-});
-
 export const catalogQuerySchema = z.object({
   type: z.enum(["movie", "series"]).optional(),
   genre: z
@@ -33,17 +16,22 @@ export const catalogQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
 });
 
-export const watchlistSyncSchema = z.object({
-  ids: z.array(z.string().min(1).max(64)).max(200),
-});
-
-export const progressSchema = z.object({
-  mediaId: z.string().min(1).max(64),
-  episodeId: z.string().min(1).max(64).nullable().optional(),
-  positionSeconds: z.coerce.number().int().min(0).max(3600 * 40),
-  durationSeconds: z.coerce.number().int().min(1).max(3600 * 40),
-  completed: z.boolean().optional(),
-});
+export const progressSchema = z
+  .object({
+    mediaId: z.string().min(1).max(64),
+    episodeId: z.string().min(1).max(64).nullable().optional(),
+    positionSeconds: z.coerce.number().int().min(0).max(3600 * 40).optional(),
+    progressSeconds: z.coerce.number().int().min(0).max(3600 * 40).optional(),
+    durationSeconds: z.coerce.number().int().min(1).max(3600 * 40),
+    completed: z.boolean().optional(),
+  })
+  .transform((data) => ({
+    mediaId: data.mediaId,
+    episodeId: data.episodeId,
+    positionSeconds: data.positionSeconds ?? data.progressSeconds ?? 0,
+    durationSeconds: data.durationSeconds,
+    completed: data.completed,
+  }));
 
 export const progressQuerySchema = z.object({
   mediaId: z.string().min(1).max(64),
@@ -53,7 +41,7 @@ export const progressQuerySchema = z.object({
 export const playbackAuthorizeSchema = z.object({
   mediaId: z.string().min(1).max(64),
   episodeId: z.string().min(1).max(64).nullable().optional(),
-  region: z.string().trim().length(2).optional(),
+  allowDemo: z.boolean().optional(),
 });
 
 export const catalogSyncSchema = z.object({

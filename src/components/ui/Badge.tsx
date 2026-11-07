@@ -13,7 +13,7 @@ const variantClasses: Record<BadgeVariant, string> = {
   default: "bg-white/10 text-white/90 border border-white/15",
   gold: "bg-gold/15 text-gold border border-gold/30",
   hdr: "bg-hdr/10 text-hdr border border-hdr/30",
-  accent: "bg-accent/90 text-white border border-accent",
+  accent: "bg-accent text-night border border-accent",
   outline: "bg-transparent text-muted border border-white/20",
 };
 

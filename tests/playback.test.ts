@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
-import { prisma } from "@/server/db";
+import { describe, it, expect } from "vitest";
+import { youtubeIdFrom } from "@/server/playback/providers";
 import {
   authorizePlayback,
   signPlaybackToken,
@@ -8,33 +8,11 @@ import {
 } from "@/server/playback/service";
 
 describe("Playback Authorization & Tokens", () => {
-  let testUserId: string;
-
-  beforeEach(async () => {
-    const user = await prisma.user.create({
-      data: {
-        email: `playback_test_${Date.now()}@cinevide.local`,
-        name: "Playback Tester",
-        passwordHash: "dummy",
-      },
-    });
-    testUserId = user.id;
-  });
-
-  afterAll(async () => {
-    await prisma.playbackAsset.deleteMany({
-      where: { streamUrl: { contains: "uk/master.m3u8" } },
-    });
-    await prisma.media.deleteMany({
-      where: { slug: { startsWith: "uk-only-title" } },
-    });
-  });
-
   it("signs and verifies tamper-proof playback tokens with expiration", () => {
     const expiresAt = Date.now() + 60000;
     const token = signPlaybackToken({
-      userId: testUserId,
-      mediaId: "neon-parallax",
+      userId: "user-123",
+      mediaId: "spider-man-1423191",
       episodeId: null,
       clientIp: "127.0.0.1",
       expiresAt,
@@ -42,8 +20,8 @@ describe("Playback Authorization & Tokens", () => {
 
     const verified = verifyPlaybackToken(token);
     expect(verified).not.toBeNull();
-    expect(verified?.userId).toBe(testUserId);
-    expect(verified?.mediaId).toBe("neon-parallax");
+    expect(verified?.userId).toBe("user-123");
+    expect(verified?.mediaId).toBe("spider-man-1423191");
 
     // Tampered token must fail
     const tampered = token.replace("a", "b");
@@ -51,8 +29,8 @@ describe("Playback Authorization & Tokens", () => {
 
     // Expired token must fail
     const expiredToken = signPlaybackToken({
-      userId: testUserId,
-      mediaId: "neon-parallax",
+      userId: "user-123",
+      mediaId: "spider-man-1423191",
       episodeId: null,
       clientIp: "127.0.0.1",
       expiresAt: Date.now() - 1000,
@@ -60,76 +38,47 @@ describe("Playback Authorization & Tokens", () => {
     expect(verifyPlaybackToken(expiredToken)).toBeNull();
   });
 
-  it("authorizes playback for media with active PlaybackAsset", async () => {
+  it("authorizes movie playback with ogpb embed stream URL", async () => {
     const session = await authorizePlayback({
-      userId: testUserId,
-      mediaId: "neon-parallax",
+      userId: "user-123",
+      mediaId: "the-dark-knight-155",
       clientIp: "127.0.0.1",
-      clientRegion: "US",
     });
 
-    expect(session.playbackUrl).toContain("master.m3u8");
-    expect(session.format).toBe("hls");
-    expect(session.isDemo).toBe(false);
-    expect(session.token).toBeDefined();
+    expect(session.format).toBe("ogpb");
+    expect(session.provider).toBe("ogpb");
+    expect(session.playbackUrl).toContain("https://embed.theogpiratebot.online/embed/movie/155");
+    expect(session.token).toBeTruthy();
   });
 
-  it("blocks playback when media is METADATA_ONLY", async () => {
+  it("authorizes tv series playback with season and episode", async () => {
+    const session = await authorizePlayback({
+      userId: "user-123",
+      mediaId: "stranger-things-66732",
+      episodeId: "2",
+      clientIp: "127.0.0.1",
+    });
+
+    expect(session.format).toBe("ogpb");
+    expect(session.provider).toBe("ogpb");
+    expect(session.playbackUrl).toContain("https://embed.theogpiratebot.online/embed/tv/66732/1/2");
+    expect(session.episodeNumber).toBe(2);
+    expect(session.nextEpisode?.episodeNumber).toBe(3);
+  });
+
+  it("rejects playback when slug contains no numeric TMDB ID", async () => {
     await expect(
       authorizePlayback({
-        userId: testUserId,
-        mediaId: "metadata-only-title",
+        userId: "user-123",
+        mediaId: "unknown-movie-without-id",
         clientIp: "127.0.0.1",
       })
     ).rejects.toThrow(PlaybackNotAuthorizedError);
   });
 
-  it("enforces region restrictions on licensed playback assets", async () => {
-    // "neon-parallax" allowed regions are ["GLOBAL", "US", "IN"] in test setup
-    // Let's create an asset restricted to "GB" only
-    const restrictedMedia = await prisma.media.create({
-      data: {
-        slug: `uk-only-title-${Date.now()}`,
-        title: "UK Only Film",
-        synopsis: "Region test",
-        type: "MOVIE",
-        posterUrl: "https://picsum.photos/seed/uk/480/720",
-        backdropUrl: "https://picsum.photos/seed/uk-bg/1920/1080",
-        releaseYear: 2025,
-        rating: 8.0,
-        ageRating: "15",
-        maxResolution: "HD",
-        director: "Director",
-        matchPercent: 90,
-        availability: "AVAILABLE",
-        playbackAssets: {
-          create: {
-            playbackProvider: "hls",
-            streamUrl: "https://cdn.cinevide.local/uk/master.m3u8",
-            allowedRegions: JSON.stringify(["GB"]),
-            status: "ACTIVE",
-          },
-        },
-      },
-    });
-
-    // Request from US must be rejected
-    await expect(
-      authorizePlayback({
-        userId: testUserId,
-        mediaId: restrictedMedia.id,
-        clientIp: "127.0.0.1",
-        clientRegion: "US",
-      })
-    ).rejects.toThrow("not licensed for playback in region US");
-
-    // Request from GB must succeed
-    const session = await authorizePlayback({
-      userId: testUserId,
-      mediaId: restrictedMedia.id,
-      clientIp: "127.0.0.1",
-      clientRegion: "GB",
-    });
-    expect(session.format).toBe("hls");
+  it("extracts video ids from embed and watch URLs", () => {
+    expect(youtubeIdFrom("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
+    expect(youtubeIdFrom("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=3")).toBe("dQw4w9WgXcQ");
+    expect(youtubeIdFrom("not a url")).toBeNull();
   });
 });

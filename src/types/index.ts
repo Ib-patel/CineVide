@@ -7,16 +7,23 @@ export type Genre =
   | "Comedy"
   | "Crime"
   | "Cyberpunk"
+  | "Documentary"
   | "Drama"
+  | "Family"
   | "Fantasy"
+  | "History"
   | "Horror"
+  | "Music"
   | "Mystery"
   | "Psychological"
   | "Romance"
   | "Sci-Fi"
-  | "Thriller";
+  | "Thriller"
+  | "War"
+  | "Western";
 
-export type MaxResolution = "UHD 4K" | "Full HD" | "HD";
+/** Derived from the actual video file's height at import time. */
+export type MaxResolution = "UHD 4K" | "Full HD" | "HD" | "SD";
 
 export type Availability =
   | "AVAILABLE"
@@ -68,6 +75,27 @@ export interface MediaSummary {
   demoPreviewUrl: string;
   externalSource?: string;
   metadataAttribution?: string | null;
+  /** Official YouTube trailer, playable even when the full title isn't streamable here. */
+  trailerYoutubeId?: string | null;
+  /** Rights-holder channel when the full title streams from YouTube. */
+  sourceChannel?: string | null;
+}
+
+/** A legal place to watch a title in the viewer's region (from TMDB / JustWatch). */
+export interface WatchProvider {
+  name: string;
+  logoUrl: string;
+  kind: "free" | "ads" | "flatrate" | "rent" | "buy";
+}
+
+/** Full title streams here, or (for latest releases) its official trailer does. */
+export function canPlay(item: Pick<MediaSummary, "availability" | "trailerYoutubeId">): boolean {
+  return item.availability === "AVAILABLE" || Boolean(item.trailerYoutubeId);
+}
+
+/** True when the play button would only show a trailer. */
+export function isTrailerOnly(item: Pick<MediaSummary, "availability" | "trailerYoutubeId">): boolean {
+  return item.availability !== "AVAILABLE" && Boolean(item.trailerYoutubeId);
 }
 
 export interface PlaybackSession {
@@ -76,10 +104,24 @@ export interface PlaybackSession {
   playbackUrl: string;
   token: string;
   expiresAt: string;
-  format: "hls" | "mp4";
+  format: "hls" | "mp4" | "youtube" | "ogpb";
   isDemo: boolean;
+  /** Official trailer of a title that can't be streamed in full here. */
+  isTrailer?: boolean;
+  /** YouTube video id when `format` is "youtube". */
+  youtubeId?: string | null;
+  sourceChannel?: string | null;
   provider: string;
   allowedRegions: string[];
+  title?: string;
+  episodeTitle?: string | null;
+  seasonNumber?: number | null;
+  episodeNumber?: number | null;
+  startSeconds?: number;
+  durationSeconds?: number;
+  subtitles?: { label: string; language: string; src: string }[];
+  nextEpisode?: { id: string; seasonNumber: number; episodeNumber: number; title: string } | null;
+  previousEpisode?: { id: string; seasonNumber: number; episodeNumber: number; title: string } | null;
 }
 
 /**
@@ -93,6 +135,8 @@ export interface MovieDetail extends MediaSummary {
   director: string;
   audioFormats: string[];
   subtitleLanguages: string[];
+  watchProviders: WatchProvider[];
+  watchLink: string | null;
   seasons: [];
 }
 
@@ -103,6 +147,8 @@ export interface SeriesDetail extends MediaSummary {
   director: string;
   audioFormats: string[];
   subtitleLanguages: string[];
+  watchProviders: WatchProvider[];
+  watchLink: string | null;
   seasons: Season[];
 }
 
@@ -122,12 +168,6 @@ export interface ContinueWatchingEntry {
   updatedAt: string;
 }
 
-export interface SessionUser {
-  id: string;
-  email: string;
-  name: string;
-}
-
 export interface CatalogNotification {
   id: string;
   title: string;
@@ -141,16 +181,8 @@ export interface FeaturedItem {
   previewVideoUrl: string | null;
 }
 
-export type CatalogCategory =
-  | "All"
-  | "Movies"
-  | "Series"
-  | "Action"
-  | "Sci-Fi"
-  | "Drama"
-  | "Thriller"
-  | "Fantasy"
-  | "Anime";
+/** "All", "Movies", "Series", or any genre present in the catalog (data-driven). */
+export type CatalogCategory = "All" | "Movies" | "Series" | Genre | (string & {});
 
 export const GENRE_VALUES: readonly Genre[] = [
   "Action",
@@ -159,13 +191,20 @@ export const GENRE_VALUES: readonly Genre[] = [
   "Comedy",
   "Crime",
   "Cyberpunk",
+  "Documentary",
   "Drama",
+  "Family",
+  "Fantasy",
+  "History",
   "Horror",
+  "Music",
   "Mystery",
   "Psychological",
   "Romance",
   "Sci-Fi",
   "Thriller",
+  "War",
+  "Western",
 ] as const;
 
 export function isSeries(item: MediaSummary): item is Extract<MediaSummary, { type: "series" }> {

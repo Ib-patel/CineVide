@@ -1,41 +1,66 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Outfit } from "next/font/google";
+import { Manrope, Sora } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/layout/Providers";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { MobileTabBar } from "@/components/layout/MobileTabBar";
+import { IntroSplash, INTRO_GATE_SCRIPT } from "@/components/layout/IntroSplash";
 
-const inter = Inter({
+// Sora: titles and display type. Manrope: interface and reading text.
+const sora = Sora({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-sora",
   display: "swap",
 });
 
-const outfit = Outfit({
+// A static (non-variable) Sora cut for the outlined Top 10 numerals: variable
+// fonts keep overlapping contours, which show as stray lines under a text stroke.
+const soraRank = Sora({
   subsets: ["latin"],
-  variable: "--font-outfit",
+  weight: "800",
+  variable: "--font-sora-rank",
+  display: "swap",
+});
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "Cinevide — Cinematic Movie & Series Streaming (Phase 1 Demo)",
+    default: "Cinevide — Cinematic Movies & Series",
     template: "%s · Cinevide",
   },
   description:
-    "Cinevide is a premium cinematic streaming frontend demo built with Next.js, TypeScript, and Tailwind CSS. All catalog content is fictional mock data — Phase 1 frontend only.",
+    "Stream cinematic films and binge-worthy series on Cinevide — curated originals, trending titles, and picks made for you.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#07070A",
+  themeColor: "#08080A",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${outfit.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-night font-sans text-ink">
+    <html
+      lang="en"
+      className={`${sora.variable} ${soraRank.variable} ${manrope.variable} h-full antialiased`}
+      // INTRO_GATE_SCRIPT sets data-intro on <html> before React hydrates.
+      suppressHydrationWarning
+    >
+      <head>
+        {/* Must run before first paint so returning visitors never see the intro flash. */}
+        <script dangerouslySetInnerHTML={{ __html: INTRO_GATE_SCRIPT }} />
+      </head>
+      {/* Extensions (e.g. ColorZilla's cz-shortcut-listen) add attributes to <body> before
+          React hydrates. This only silences attribute diffs on this element, not its children. */}
+      <body suppressHydrationWarning className="flex min-h-full flex-col bg-night font-sans text-ink">
+        <IntroSplash />
         <Providers>
           <a
             href="#main-content"
@@ -44,8 +69,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             Skip to content
           </a>
           <Header />
-          <main id="main-content" className="flex-1">{children}</main>
-          <Footer />
+          <main id="main-content" className="flex-1">
+            {children}
+          </main>
+          {/* Bottom padding on phones clears the tab bar (and the home indicator). */}
+          <div className="pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+            <Footer />
+          </div>
+          <MobileTabBar />
         </Providers>
       </body>
     </html>

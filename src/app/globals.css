@@ -1,22 +1,75 @@
 @import "tailwindcss";
 
-@theme {
-  --color-night: #07070a;
-  --color-surface: #0e1017;
-  --color-elevated: #161922;
-  --color-card: #12141c;
-  --color-accent: #e50914;
-  --color-accent-hover: #f40612;
-  --color-gold: #f59e0b;
+/*
+ * Cinevide design tokens.
+ * Identity: "Cinema Gold" on deep neutral black. Gold is the brand (logo,
+ * active nav, badges, progress, focus); Play actions stay white. Text placed
+ * on gold is always dark (night), never white.
+ */
+@theme static {
+  --color-night: #08080a;
+  --color-surface: #0e0e12;
+  --color-elevated: #17171c;
+  --color-card: #121216;
+  --color-accent: #f2b544; /* Cinema Gold: 11:1 on night; dark text on it is 11:1 */
+  --color-accent-hover: #ffc85c;
+  --color-amber: #e89a2c; /* deep end of the gold gradient */
+  --color-gold: #f2b544;
   --color-hdr: #38bdf8;
-  --color-ink: #ffffff;
-  --color-muted: #9ca3af;
-  --color-subtle: #6b7280;
+  --color-ink: #f5f5f7;
+  --color-muted: #a1a1aa;
+  --color-subtle: #8b8b94; /* 5.6:1 on night (AA for small text) */
 
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-outfit), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), var(--font-manrope), ui-sans-serif, sans-serif;
 
   --breakpoint-3xl: 1920px;
+
+  /* Motion: strong custom curves; the built-in easings are too weak. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-kenburns: kenburns 14s var(--ease-in-out) both;
+  --animate-fade-in: fade-in 240ms var(--ease-out) both;
+}
+
+/* Keyframes live outside @theme so plain-CSS references are never tree-shaken. */
+@keyframes shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@keyframes kenburns {
+  from {
+    transform: scale(1.08) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1) translate3d(-1%, -1%, 0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes progress-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 
 @utility no-scrollbar {
@@ -31,37 +84,405 @@
   text-shadow: 0 2px 24px rgb(0 0 0 / 0.9), 0 1px 3px rgb(0 0 0 / 0.9);
 }
 
+/*
+ * Outlined rank numerals. The fill is the page colour and the stroke is painted
+ * underneath it, so overlapping glyph contours (Sora's "1" and "4") never show
+ * as stray inner lines. Stroke is doubled because the fill covers its inner half.
+ */
 @utility rank-stroke {
-  color: transparent;
-  -webkit-text-stroke: 3px rgba(156, 163, 175, 0.9);
+  font-family: var(--font-sora-rank), var(--font-display);
+  font-weight: 800;
+  color: var(--color-night);
+  -webkit-text-stroke: 6px rgba(161, 161, 170, 0.85);
+  paint-order: stroke fill;
+}
+
+/* Brand gold sheen: reserved for active indicators and progress fills. */
+@utility bg-projector {
+  background-image: linear-gradient(100deg, var(--color-amber) 0%, var(--color-accent) 55%, #ffd88a 100%);
+}
+
+
+/* Skeleton placeholder: a soft highlight sweeping across the shape. */
+@utility skeleton {
+  background-color: rgb(255 255 255 / 0.05);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.06) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/*
+ * Press feedback for any pressable surface. Transform only, so it composites
+ * on the GPU; hover styles stay gated to real pointers elsewhere.
+ */
+@utility pressable {
+  transition-property: transform, background-color, border-color, color, box-shadow, opacity;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-out);
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/*
+ * Premium card hover. Three layers, all gated to real mice:
+ *  1. Lift: the card rises 4px with a deep, faintly gold shadow.
+ *  2. Sheen (::before): a soft light band glides across once on hover-in.
+ *     Asymmetric: it sweeps over 900ms, then snaps back invisibly on leave.
+ *  3. Spotlight (::after): a faint glow follows the cursor (--mx/--my, set by
+ *     useSpotlight on the card itself so only this card's styles recalc).
+ * Uses `translate`/`scale` (not `transform`) so press and lift compose.
+ * The element needs `overflow-hidden` and a rounded radius of its own.
+ */
+@utility card-fx {
+  position: relative;
+  isolation: isolate;
+  transition-property: translate, scale, box-shadow, border-color;
+  transition-duration: 320ms;
+  transition-timing-function: var(--ease-out);
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+  &::before {
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      rgb(255 255 255 / 0.13) 48%,
+      rgb(255 236 200 / 0.08) 52%,
+      transparent 65%
+    );
+    translate: -120% 0;
+    /* Leaving: snap back instantly so it never sweeps in reverse. */
+    transition: translate 0s;
+  }
+  &::after {
+    background: radial-gradient(
+      220px circle at var(--mx, 50%) var(--my, 0%),
+      rgb(255 255 255 / 0.1),
+      transparent 65%
+    );
+    opacity: 0;
+    transition: opacity 260ms var(--ease-out);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      translate: 0 -4px;
+      box-shadow:
+        0 22px 40px -22px rgb(0 0 0 / 0.95),
+        0 14px 36px -24px rgb(242 181 68 / 0.4);
+    }
+    &:hover::before {
+      translate: 120% 0;
+      transition: translate 900ms var(--ease-out);
+    }
+    &:hover::after {
+      opacity: 1;
+    }
+  }
+}
+
+/* The same light sweep for solid CTA buttons (Play / Watch Now). */
+@utility btn-sheen {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / 0.45) 50%, transparent 70%);
+    translate: -130% 0;
+    transition: translate 0s;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover::before {
+      translate: 130% 0;
+      transition: translate 750ms var(--ease-out);
+    }
+  }
 }
 
 html {
   scrollbar-gutter: stable;
+  color-scheme: dark;
 }
 
 body {
   background-color: var(--color-night);
+  caret-color: var(--color-accent);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
-  background-color: rgba(229, 9, 20, 0.7);
-  color: #ffffff;
+  background-color: rgb(242 181 68 / 0.85);
+  color: #08080a;
 }
 
 img {
   user-select: none;
 }
 
+/* Hero auto-advance indicator: fills over the slide's duration, pauses on hover. */
+.hero-progress {
+  transform-origin: left center;
+  animation: progress-fill var(--hero-duration, 11s) linear forwards;
+}
+.hero-paused .hero-progress {
+  animation-play-state: paused;
+}
+
+/* Row reveal: one-time fade-up as each row scrolls into view. */
+.row-reveal {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition:
+    opacity 520ms var(--ease-out),
+    transform 520ms var(--ease-out);
+}
+.row-reveal[data-visible="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Grid cascade: each card rises in with a short, capped stagger (set inline). */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.grid-rise {
+  animation: rise 420ms var(--ease-out) both;
+}
+
+/*
+ * Image "develop": posters fade up as their bytes arrive instead of popping in.
+ * Opacity only (composited, cheap across a row of 20 cards). The keyframe has no
+ * `to`, so it lands on whatever opacity the image's own classes set (e.g. the
+ * dimmed 60% on unplayable titles), and `backwards` drops it once finished.
+ */
+@keyframes develop {
+  from {
+    opacity: 0;
+  }
+}
+img[data-develop="pending"] {
+  opacity: 0;
+}
+img[data-develop="fade"] {
+  animation: develop 420ms var(--ease-out) backwards;
+}
+
+/*
+ * Intro splash (IntroSplash.tsx). Timeline, from first paint:
+ *   0.15–0.95s  ring draws itself around from the top of its opening
+ *   0.70–1.15s  play triangle pushes out through the opening (slight overshoot)
+ *   0.85–1.80s  projector glow blooms behind the mark, then settles
+ *   0.98–1.65s  wordmark letters rise in, 45ms apart
+ *   2.00–2.55s  stage drifts forward + overlay dissolves into the app
+ * Pure CSS so it never stutters while the app hydrates, and it exits even
+ * without JS. html[data-intro="skip"] is set pre-paint by INTRO_GATE_SCRIPT.
+ */
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(60% 50% at 50% 50%, rgb(242 181 68 / 0.07), transparent 70%),
+    var(--color-night);
+  animation: intro-out 550ms var(--ease-in-out) 2s forwards;
+}
+.intro[data-skipping] {
+  animation: intro-out-fast 260ms var(--ease-out) forwards;
+}
+html[data-intro="skip"] .intro {
+  display: none;
+}
+.intro-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  animation: intro-stage-out 550ms var(--ease-in-out) 2s forwards;
+}
+.intro-glow {
+  position: absolute;
+  top: -40%;
+  left: 50%;
+  width: 26rem;
+  height: 26rem;
+  translate: -50% 0;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgb(242 181 68 / 0.28), rgb(232 154 44 / 0.08) 40%, transparent 68%);
+  opacity: 0;
+  scale: 0.6;
+  pointer-events: none;
+  animation: intro-glow 950ms var(--ease-out) 850ms forwards;
+}
+.intro-mark {
+  position: relative;
+  width: clamp(5.5rem, 18vw, 8rem);
+  height: auto;
+  overflow: visible;
+}
+.intro-ring {
+  stroke-dasharray: 100 101;
+  stroke-dashoffset: 100;
+  opacity: 0;
+  animation: intro-ring 800ms var(--ease-in-out) 150ms forwards;
+}
+.intro-play {
+  transform-box: fill-box;
+  transform-origin: 30% 50%;
+  opacity: 0;
+  translate: -5px 0;
+  scale: 0.55;
+  animation: intro-play 450ms cubic-bezier(0.34, 1.56, 0.64, 1) 700ms forwards;
+}
+.intro-word {
+  position: relative;
+  display: flex;
+  font-size: clamp(1.6rem, 6vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  color: var(--color-ink);
+  /* Optical centring: the trailing letter-spacing would push it left. */
+  margin-right: -0.14em;
+}
+.intro-word span {
+  display: inline-block;
+  opacity: 0;
+  translate: 0 0.45em;
+  animation: intro-letter 520ms var(--ease-out) forwards;
+}
+
+@keyframes intro-ring {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes intro-play {
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+@keyframes intro-glow {
+  55% {
+    opacity: 1;
+    scale: 1.05;
+  }
+  100% {
+    opacity: 0.55;
+    scale: 1;
+  }
+}
+@keyframes intro-letter {
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes intro-stage-out {
+  to {
+    opacity: 0;
+    scale: 1.12;
+  }
+}
+@keyframes intro-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+/* Separate name so switching to it restarts the animation from the current frame. */
+@keyframes intro-out-fast {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+/* Page-level route entrance (opacity only: navigations are frequent). */
+.page-enter {
+  animation: var(--animate-fade-in);
+}
+
+/*
+ * Reduced motion = fewer, gentler animations, not zero: kill movement and
+ * looping effects, keep short opacity/colour fades that aid comprehension.
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  .grid-rise {
+    animation: fade-in 200ms ease both;
+  }
+  .row-reveal {
+    transform: none;
+    transition: opacity 200ms ease;
+  }
+  .pressable:active:not(:disabled) {
+    transform: none;
+  }
+  /* Keep the colour/shadow feedback; drop movement, the sweep and the cursor glow. */
+  .card-fx,
+  .card-fx:hover,
+  .card-fx:active {
+    translate: none;
+    scale: none;
+  }
+  .card-fx::before,
+  .card-fx::after,
+  .btn-sheen::before {
+    display: none;
+  }
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* The header search draws its own clear button; hide the browser's duplicate. */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
 }

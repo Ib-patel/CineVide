@@ -14,14 +14,14 @@ export function BrowseGrid({ items, title, description, emptyMessage }: BrowseGr
   return (
     <section className="mx-auto w-full max-w-[1920px] px-4 pt-28 pb-16 md:px-10 md:pt-32">
       <header className="mb-8">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-ink md:text-4xl">
+        <h1 className="font-display text-3xl font-bold tracking-[-0.03em] text-ink md:text-5xl">
           {title}
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted md:text-base">{description}</p>
       </header>
 
       {items.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-card px-6 py-16 text-center">
+        <div className="rounded-2xl border border-white/[0.06] bg-surface/60 px-6 py-16 text-center">
           <p className="font-display text-lg font-semibold text-ink">
             {emptyMessage ?? "Nothing here yet"}
           </p>
@@ -33,12 +33,14 @@ export function BrowseGrid({ items, title, description, emptyMessage }: BrowseGr
         </div>
       ) : (
         <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6">
-          {items.map((item) => (
-            <li key={item.id}>
-              <MediaCard
-                item={item}
-                className="w-full"
-              />
+          {items.map((item, index) => (
+            // Short cascade on first paint; capped so a long grid never makes the user wait.
+            <li
+              key={item.id}
+              className="grid-rise"
+              style={{ animationDelay: `${Math.min(index, 14) * 35}ms` }}
+            >
+              <MediaCard item={item} layout="grid" priority={index < 6} />
             </li>
           ))}
         </ul>

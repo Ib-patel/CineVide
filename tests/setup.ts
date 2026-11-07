@@ -1,6 +1,11 @@
-process.env.DATABASE_URL =
-  process.env.TEST_DATABASE_URL ||
-  "postgresql://cinevide:cinevide_dev@localhost:54322/cinevide_test";
-process.env.AUTH_SESSION_COOKIE = "cinevide_session";
-process.env.AUTH_SESSION_TTL_DAYS = "30";
-process.env.AUTH_SESSION_SECURE = "false";
+process.env.COOKIE_SECURE = "false";
+process.env.PLAYBACK_TOKEN_SECRET = "test-playback-secret-1234567890123456";
+
+// `cacheLife()`/`cacheTag()` only work inside a Next.js render; outside it they throw.
+// In unit tests "use cache" is a no-op string, so these become no-ops too.
+import { vi } from "vitest";
+vi.mock("next/cache", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/cache")>()),
+  cacheLife: () => {},
+  cacheTag: () => {},
+}));

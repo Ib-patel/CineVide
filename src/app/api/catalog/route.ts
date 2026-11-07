@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { handleRoute, apiOk } from "@/server/http";
-import { listCatalog } from "@/server/services/catalog";
+import { handleRoute, apiOk, CATALOG_CACHE_HEADERS, SEARCH_CACHE_HEADERS } from "@/server/http";
+import { BROWSABLE_AVAILABILITY, listCatalog } from "@/server/services/catalog";
 import { catalogQuerySchema } from "@/server/validators";
 
 export async function GET(request: NextRequest) {
@@ -15,8 +15,11 @@ export async function GET(request: NextRequest) {
       limit: searchParams.get("limit") ?? undefined,
     });
 
-    const result = await listCatalog(parsed);
-    return apiOk(result);
+    // Free-text search also surfaces catalog-only (METADATA_ONLY) titles, like searchCatalog().
+    const result = await listCatalog(
+      parsed.q ? { ...parsed, availability: BROWSABLE_AVAILABILITY } : parsed
+    );
+    return apiOk(result, { headers: parsed.q ? SEARCH_CACHE_HEADERS : CATALOG_CACHE_HEADERS });
   }, "GET /api/catalog");
 }
 

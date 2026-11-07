@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 
+// React Refresh needs eval in development only; production scripts never do.
+const isDev = process.env.NODE_ENV !== "production";
+
 const securityHeaders = [
   {
     key: "X-Frame-Options",
@@ -25,11 +28,15 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+      // Embed players (YouTube, stream embeds and CDN mirrors).
+      `script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com${isDev ? " 'unsafe-eval'" : ""}`,
+      "frame-src 'self' https: http: blob: data:",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://picsum.photos https://fastly.picsum.photos https://image.tmdb.org",
-      "media-src 'self' blob: data: https: http:",
-      "connect-src 'self' https://api.themoviedb.org https://image.tmdb.org https: http:",
+      "img-src 'self' data: blob: https://image.tmdb.org https://archive.org https://*.archive.org https://i.ytimg.com",
+      // Licensed streams can come from any HTTPS CDN (hls.js fetches manifests/segments via XHR);
+      // plain http is only allowed in development.
+      `media-src 'self' blob: data: https:${isDev ? " http:" : ""}`,
+      `connect-src 'self' https:${isDev ? " http: ws:" : ""}`,
       "font-src 'self' data:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
@@ -45,21 +52,29 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "picsum.photos",
-        port: "",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "fastly.picsum.photos",
-        port: "",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
         hostname: "image.tmdb.org",
         port: "",
         pathname: "/**",
+      },
+      // Internet Archive stills/tiles (download URLs redirect to *.archive.org nodes).
+      {
+        protocol: "https",
+        hostname: "archive.org",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.archive.org",
+        port: "",
+        pathname: "/**",
+      },
+      // Episode thumbnails for series streamed from official YouTube channels.
+      {
+        protocol: "https",
+        hostname: "i.ytimg.com",
+        port: "",
+        pathname: "/vi/**",
       },
     ],
   },

@@ -1,81 +1,46 @@
 import Link from "next/link";
+import { Logo } from "@/components/ui/Logo";
 
-const FOOTER_SECTIONS = [
-  {
-    heading: "Browse",
-    links: ["Home", "Movies", "Series", "Trending", "My List"],
-  },
-  {
-    heading: "Company",
-    links: ["About Cinevide", "Careers", "Newsroom", "Contact"],
-  },
-  {
-    heading: "Support",
-    links: ["Help Center", "Devices", "Accessibility", "Status"],
-  },
-  {
-    heading: "Legal",
-    links: ["Terms of Use", "Privacy", "Cookie Preferences", "Notices"],
-  },
+// Only pages that exist. On phones the bottom tab bar already carries these.
+const LINKS = [
+  { label: "Home", href: "/" },
+  { label: "Movies", href: "/movies" },
+  { label: "Series", href: "/series" },
+  { label: "Trending", href: "/trending" },
+  { label: "My List", href: "/my-list" },
 ] as const;
-
-const SECTION_ROUTES: Record<string, string> = {
-  Home: "/",
-  Movies: "/movies",
-  Series: "/series",
-  Trending: "/trending",
-  "My List": "/my-list",
-};
 
 export function Footer() {
   return (
-    <footer className="border-t border-white/5 bg-surface pb-10 pt-12">
-      <div className="mx-auto max-w-6xl px-6 md:px-10">
-        <div className="flex items-center gap-2">
-          <span className="font-display text-xl font-bold tracking-tight text-ink">
-            Cine<span className="text-accent">vide</span>
-          </span>
-          <span className="rounded-md border border-white/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-muted uppercase">
-            Preview & Real Catalog
-          </span>
+    <footer className="border-t border-white/5 bg-surface">
+      <div className="mx-auto max-w-[1920px] px-4 py-8 md:px-10 md:py-10">
+        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <Link
+            href="/"
+            aria-label="Cinevide home"
+            className="w-fit rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          >
+            <Logo size="sm" />
+          </Link>
+
+          <nav aria-label="Footer" className="hidden md:block">
+            <ul className="flex flex-wrap items-center gap-x-1 gap-y-2">
+              {LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </div>
 
-        <nav aria-label="Footer" className="mt-8 grid grid-cols-2 gap-8 sm:grid-cols-4">
-          {FOOTER_SECTIONS.map((section) => (
-            <div key={section.heading}>
-              <h3 className="text-xs font-semibold tracking-wider text-subtle uppercase">
-                {section.heading}
-              </h3>
-              <ul className="mt-3 space-y-2">
-                {section.links.map((label) => {
-                  const href = SECTION_ROUTES[label];
-                  return href ? (
-                    <li key={label}>
-                      <Link
-                        href={href}
-                        className="text-sm text-muted transition-colors hover:text-ink"
-                      >
-                        {label}
-                      </Link>
-                    </li>
-                  ) : (
-                    <li key={label}>
-                      <span className="text-sm text-white/50" title="Not available in this demo">
-                        {label}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </nav>
-
-        <div className="mt-10 space-y-2 border-t border-white/5 pt-6">
-          <p className="text-xs leading-relaxed text-subtle">
-            Cinevide combines verified catalog data with authorized playback streams. This product uses the TMDB API but is not endorsed or certified by TMDB. Sample preview media is CC0 licensed.
-          </p>
-          <p className="text-xs text-white/25">© 2026 Cinevide. Built with Next.js & PostgreSQL.</p>
+        <div className="mt-6 border-t border-white/5 pt-6">
+          <p className="text-xs text-white/30">© 2026 Cinevide</p>
         </div>
       </div>
     </footer>

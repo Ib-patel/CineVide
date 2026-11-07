@@ -1,14 +1,8 @@
 import "server-only";
-import { prisma } from "@/server/db";
-import { toSummary } from "@/server/serializers";
+import { randomUUID } from "node:crypto";
+import { getMediaById } from "@/server/services/catalog";
 import type { ContinueWatchingEntry, MediaSummary } from "@/types";
 
-const MEDIA_INCLUDE = {
-  genres: true,
-  seasons: { select: { seasonNumber: true } },
-} as const;
-
-/** Content counts as finished once 95% has been watched. */
 const COMPLETION_RATIO = 0.95;
 
 export interface SaveProgressInput {
@@ -20,6 +14,24 @@ export interface SaveProgressInput {
   completed?: boolean;
 }
 
+interface StoredProgress {
+  id: string;
+  userId: string;
+  mediaId: string;
+  episodeId: string | null;
+  positionSeconds: number;
+  durationSeconds: number;
+  completed: boolean;
+  updatedAt: Date;
+}
+
+// In-memory progress store keyed by `userId:mediaId:episodeId`
+const progressStore = new Map<string, StoredProgress>();
+
+function makeKey(userId: string, mediaId: string, episodeId: string | null): string {
+  return `${userId}:${mediaId}:${episodeId ?? "movie"}`;
+}
+
 function isCompleted(input: SaveProgressInput): boolean {
   if (typeof input.completed === "boolean") return input.completed;
   if (input.durationSeconds > 0) {
@@ -29,39 +41,48 @@ function isCompleted(input: SaveProgressInput): boolean {
 }
 
 export async function saveProgress(input: SaveProgressInput): Promise<ContinueWatchingEntry | null> {
-  const media = await prisma.media.findFirst({
-    where: { OR: [{ id: input.mediaId }, { slug: input.mediaId }] },
-    include: MEDIA_INCLUDE,
-  });
-  if (!media) return null;
-
-  let episodeId: string | null = null;
-  if (input.episodeId) {
-    const episode = await prisma.episode.findUnique({
-      where: { id: input.episodeId },
-      select: { id: true, season: { select: { mediaId: true } } },
-    });
-    if (episode && episode.season.mediaId === media.id) episodeId = episode.id;
-  }
-
+  const mediaId = input.mediaId;
+  const episodeId = input.episodeId ?? null;
   const positionSeconds = Math.max(0, Math.floor(input.positionSeconds));
   const durationSeconds = Math.max(1, Math.floor(input.durationSeconds));
   const completed = isCompleted(input);
 
-  const existing = await prisma.watchProgress.findFirst({
-    where: { userId: input.userId, mediaId: media.id, episodeId },
-    select: { id: true },
-  });
+  const key = makeKey(input.userId, mediaId, episodeId);
+  const existing = progressStore.get(key);
 
-  const data = { userId: input.userId, mediaId: media.id, episodeId, positionSeconds, durationSeconds, completed };
+  const record: StoredProgress = {
+    id: existing?.id ?? randomUUID(),
+    userId: input.userId,
+    mediaId,
+    episodeId,
+    positionSeconds,
+    durationSeconds,
+    completed,
+    updatedAt: new Date(),
+  };
 
-  if (existing) {
-    await prisma.watchProgress.update({ where: { id: existing.id }, data });
-  } else {
-    await prisma.watchProgress.create({ data });
-  }
+  progressStore.set(key, record);
 
-  return continueWatchingEntry(media.id, episodeId);
+  if (completed) return null;
+
+  const media = await getMediaById(mediaId);
+  if (!media) return null;
+
+  return {
+    id: record.id,
+    media,
+    episode: episodeId
+      ? {
+          id: episodeId,
+          seasonNumber: 1,
+          episodeNumber: Number(episodeId) || 1,
+          title: `Episode ${episodeId}`,
+        }
+      : null,
+    progressSeconds: positionSeconds,
+    durationSeconds,
+    updatedAt: record.updatedAt.toISOString(),
+  };
 }
 
 export async function getProgress(
@@ -69,81 +90,66 @@ export async function getProgress(
   mediaId: string,
   episodeId?: string
 ): Promise<{ positionSeconds: number; durationSeconds: number; completed: boolean } | null> {
-  const row = await prisma.watchProgress.findFirst({
-    where: {
-      userId,
-      OR: [{ media: { id: mediaId } }, { media: { slug: mediaId } }],
-      episodeId: episodeId ?? null,
-    },
-    select: { positionSeconds: true, durationSeconds: true, completed: true },
-  });
-  return row;
-}
-
-export async function getContinueWatching(userId: string, limit = 12): Promise<ContinueWatchingEntry[]> {
-  const rows = await prisma.watchProgress.findMany({
-    where: {
-      userId,
-      completed: false,
-      media: { availability: "AVAILABLE" },
-    },
-    orderBy: { updatedAt: "desc" },
-    take: limit,
-    include: { media: { include: MEDIA_INCLUDE }, episode: { include: { season: true } } },
-  });
-  return rows.map((row) => ({
-    id: row.id,
-    media: toSummary(row.media),
-    episode: row.episode
-      ? {
-          id: row.episode.id,
-          seasonNumber: row.episode.season.seasonNumber,
-          episodeNumber: row.episode.episodeNumber,
-          title: row.episode.title,
-        }
-      : null,
-    progressSeconds: row.positionSeconds,
-    durationSeconds: row.durationSeconds,
-    updatedAt: row.updatedAt.toISOString(),
-  }));
-}
-
-export async function deleteUserProgress(userId: string, mediaId: string): Promise<boolean> {
-  const result = await prisma.watchProgress.deleteMany({
-    where: { userId, OR: [{ media: { id: mediaId } }, { media: { slug: mediaId } }] },
-  });
-  return result.count > 0;
-}
-
-async function continueWatchingEntry(mediaId: string, episodeId: string | null): Promise<ContinueWatchingEntry | null> {
-  const row = await prisma.watchProgress.findFirst({
-    where: { mediaId, episodeId, completed: false },
-    include: { media: { include: MEDIA_INCLUDE }, episode: { include: { season: true } } },
-  });
-  if (!row) return null;
+  const key = makeKey(userId, mediaId, episodeId ?? null);
+  const found = progressStore.get(key);
+  if (!found) return null;
   return {
-    id: row.id,
-    media: toSummary(row.media),
-    episode: row.episode
-      ? {
-          id: row.episode.id,
-          seasonNumber: row.episode.season.seasonNumber,
-          episodeNumber: row.episode.episodeNumber,
-          title: row.episode.title,
-        }
-      : null,
-    progressSeconds: row.positionSeconds,
-    durationSeconds: row.durationSeconds,
-    updatedAt: row.updatedAt.toISOString(),
+    positionSeconds: found.positionSeconds,
+    durationSeconds: found.durationSeconds,
+    completed: found.completed,
   };
 }
 
+export async function getContinueWatching(userId: string, limit = 12): Promise<ContinueWatchingEntry[]> {
+  const userEntries = Array.from(progressStore.values())
+    .filter((e) => e.userId === userId && !e.completed)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, limit);
+
+  const results: ContinueWatchingEntry[] = [];
+  for (const entry of userEntries) {
+    const media = await getMediaById(entry.mediaId);
+    if (!media) continue;
+    results.push({
+      id: entry.id,
+      media,
+      episode: entry.episodeId
+        ? {
+            id: entry.episodeId,
+            seasonNumber: 1,
+            episodeNumber: Number(entry.episodeId) || 1,
+            title: `Episode ${entry.episodeId}`,
+          }
+        : null,
+      progressSeconds: entry.positionSeconds,
+      durationSeconds: entry.durationSeconds,
+      updatedAt: entry.updatedAt.toISOString(),
+    });
+  }
+  return results;
+}
+
+export async function deleteUserProgress(userId: string, mediaId: string): Promise<boolean> {
+  let deleted = false;
+  for (const [key, entry] of progressStore.entries()) {
+    if (entry.userId === userId && entry.mediaId === mediaId) {
+      progressStore.delete(key);
+      deleted = true;
+    }
+  }
+  return deleted;
+}
+
 export async function listCompletedTitles(userId: string, limit = 20): Promise<MediaSummary[]> {
-  const rows = await prisma.watchProgress.findMany({
-    where: { userId, completed: true },
-    orderBy: { updatedAt: "desc" },
-    take: limit,
-    include: { media: { include: MEDIA_INCLUDE } },
-  });
-  return rows.map((row) => toSummary(row.media));
+  const userEntries = Array.from(progressStore.values())
+    .filter((e) => e.userId === userId && e.completed)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, limit);
+
+  const results: MediaSummary[] = [];
+  for (const entry of userEntries) {
+    const media = await getMediaById(entry.mediaId);
+    if (media) results.push(media);
+  }
+  return results;
 }

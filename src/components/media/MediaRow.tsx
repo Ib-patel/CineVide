@@ -10,10 +10,14 @@ interface MediaRowProps {
   children: ReactNode;
 }
 
+const EDGE_FADE = "56px";
+
 export function MediaRow({ title, subtitle, children }: MediaRowProps) {
+  const sectionRef = useRef<HTMLElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
+  const [visible, setVisible] = useState(false);
 
   const updateArrows = useCallback(() => {
     const el = scrollerRef.current;
@@ -24,25 +28,47 @@ export function MediaRow({ title, subtitle, children }: MediaRowProps) {
 
   useEffect(() => {
     updateArrows();
-    window.addEventListener("resize", updateArrows);
     const observer = new ResizeObserver(updateArrows);
     if (scrollerRef.current) observer.observe(scrollerRef.current);
-    return () => {
-      window.removeEventListener("resize", updateArrows);
-      observer.disconnect();
-    };
+    return () => observer.disconnect();
   }, [updateArrows, children]);
 
-  const scrollByAmount = (direction: 1 | -1) => {
+  // One-time reveal as the row approaches the viewport (it never re-animates on scroll back).
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setVisible(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -60px 0px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const scrollByPage = (direction: 1 | -1) => {
     const el = scrollerRef.current;
     if (!el) return;
-    el.scrollBy({ left: direction * el.clientWidth * 0.85, behavior: "smooth" });
+    // Scroll-snap settles the final position on a card edge.
+    el.scrollBy({ left: direction * el.clientWidth * 0.86, behavior: "smooth" });
   };
 
+  // Soft edges only where more content exists, so the row never looks cut off at rest.
+  const mask = `linear-gradient(90deg, ${atStart ? "#000" : "transparent"} 0, #000 ${EDGE_FADE}, #000 calc(100% - ${EDGE_FADE}), ${atEnd ? "#000" : "transparent"} 100%)`;
+
   return (
-    <section className="group/row relative py-5" aria-label={title}>
+    <section
+      ref={sectionRef}
+      data-visible={visible}
+      className="row-reveal group/row relative py-4 md:py-5"
+      aria-label={title}
+    >
       <div className="mb-3 flex items-baseline gap-3 px-4 md:px-10">
-        <h2 className="font-display text-lg font-semibold tracking-tight text-ink md:text-xl">
+        <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-ink md:text-[1.35rem]">
           {title}
         </h2>
         {subtitle ? <p className="text-xs text-subtle">{subtitle}</p> : null}
@@ -52,21 +78,14 @@ export function MediaRow({ title, subtitle, children }: MediaRowProps) {
         <div
           ref={scrollerRef}
           onScroll={updateArrows}
-          className="flex gap-3 overflow-x-auto scroll-smooth px-4 pt-1 pb-8 no-scrollbar md:px-10"
+          style={{ maskImage: mask, WebkitMaskImage: mask }}
+          className="flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain -mt-2 px-4 pt-3 pb-6 no-scrollbar md:scroll-px-10 md:gap-4 md:px-10"
         >
           {children}
         </div>
 
-        <RowArrow
-          direction="left"
-          hidden={atStart}
-          onClick={() => scrollByAmount(-1)}
-        />
-        <RowArrow
-          direction="right"
-          hidden={atEnd}
-          onClick={() => scrollByAmount(1)}
-        />
+        <RowArrow direction="left" hidden={atStart} onClick={() => scrollByPage(-1)} />
+        <RowArrow direction="right" hidden={atEnd} onClick={() => scrollByPage(1)} />
       </div>
     </section>
   );
@@ -86,10 +105,12 @@ function RowArrow({
     <button
       type="button"
       onClick={onClick}
+      tabIndex={hidden ? -1 : 0}
+      aria-hidden={hidden}
       aria-label={direction === "left" ? "Scroll row left" : "Scroll row right"}
       className={cn(
-        "absolute top-1/2 z-30 hidden size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-night/85 text-ink backdrop-blur-md transition-opacity duration-200 hover:border-white/40 hover:bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:flex",
-        direction === "left" ? "left-2" : "right-2",
+        "pressable absolute top-[calc(50%-12px)] z-30 hidden size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-night/80 text-ink shadow-xl backdrop-blur-md hover:border-white/40 hover:bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:flex",
+        direction === "left" ? "left-3" : "right-3",
         hidden
           ? "pointer-events-none opacity-0"
           : "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"

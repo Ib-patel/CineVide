@@ -7,9 +7,24 @@ interface RateLimitRecord {
 
 const stores = new Map<string, Map<string, RateLimitRecord>>();
 
+/** Sweep expired keys at most this often, so idle IPs do not accumulate forever. */
+const SWEEP_INTERVAL_MS = 60 * 1000;
+let lastSweepAt = 0;
+
+function sweepExpired(now: number): void {
+  if (now - lastSweepAt < SWEEP_INTERVAL_MS) return;
+  lastSweepAt = now;
+  for (const store of stores.values()) {
+    for (const [key, record] of store) {
+      if (now >= record.resetAt) store.delete(key);
+    }
+  }
+}
+
 /**
- * In-memory sliding window rate limiter.
- * Automatically cleans up expired keys to prevent memory leak.
+ * In-memory fixed-window rate limiter (per process; use a shared store such as
+ * Redis when running more than one instance). Each key may make `maxRequests`
+ * requests per `windowMs`, starting from its first request in the window.
  */
 export function checkRateLimit(
   bucket: string,
@@ -17,13 +32,15 @@ export function checkRateLimit(
   maxRequests: number,
   windowMs: number
 ): { allowed: boolean; retryAfterSeconds: number; remaining: number } {
+  const now = Date.now();
+  sweepExpired(now);
+
   let store = stores.get(bucket);
   if (!store) {
     store = new Map<string, RateLimitRecord>();
     stores.set(bucket, store);
   }
 
-  const now = Date.now();
   const record = store.get(key);
 
   if (!record || now >= record.resetAt) {

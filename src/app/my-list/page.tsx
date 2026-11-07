@@ -19,7 +19,7 @@ export default function MyListPage() {
     <BrowseGrid
       items={watchlistItems}
       title="My List"
-      description="Titles you've saved with the + button. Stored locally in your browser — nothing is sent to a server in Phase 1."
+      description="Titles you've saved with the + button, kept on this device."
       emptyMessage="Your list is empty"
     />
   );

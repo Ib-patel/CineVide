@@ -11,20 +11,26 @@ import {
 } from "react";
 import type { ContinueWatchingEntry, MediaSummary } from "@/types";
 
-export type ModalMode = "details" | "demo";
+export type ModalMode = "details" | "playback" | "demo";
 
-/** Optional playback context when launching the demo preview from Continue Watching. */
-export interface DemoPlaybackContext {
-  entry: ContinueWatchingEntry;
+/** Optional playback context when launching the video player. */
+export interface PlaybackContext {
+  entry?: ContinueWatchingEntry;
+  episodeId?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
 }
+
+export type DemoPlaybackContext = PlaybackContext;
 
 interface ModalContextValue {
   isOpen: boolean;
   mode: ModalMode;
   selectedItem: MediaSummary | null;
-  playbackContext: DemoPlaybackContext | null;
+  playbackContext: PlaybackContext | null;
   openDetails: (item: MediaSummary) => void;
-  openDemoPreview: (item: MediaSummary, playbackContext?: DemoPlaybackContext) => void;
+  openPlayback: (item: MediaSummary, playbackContext?: PlaybackContext) => void;
+  openDemoPreview: (item: MediaSummary, playbackContext?: PlaybackContext) => void;
   closeModal: () => void;
 }
 
@@ -34,7 +40,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<ModalMode>("details");
   const [selectedItem, setSelectedItem] = useState<MediaSummary | null>(null);
-  const [playbackContext, setPlaybackContext] = useState<DemoPlaybackContext | null>(null);
+  const [playbackContext, setPlaybackContext] = useState<PlaybackContext | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
 
   const openDetails = useCallback((item: MediaSummary) => {
@@ -45,13 +51,17 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     setIsOpen(true);
   }, []);
 
-  const openDemoPreview = useCallback((item: MediaSummary, context?: DemoPlaybackContext) => {
+  const openPlayback = useCallback((item: MediaSummary, context?: PlaybackContext) => {
     triggerRef.current = document.activeElement as HTMLElement | null;
     setSelectedItem(item);
-    setMode("demo");
+    setMode("playback");
     setPlaybackContext(context ?? null);
     setIsOpen(true);
   }, []);
+
+  const openDemoPreview = useCallback((item: MediaSummary, context?: PlaybackContext) => {
+    openPlayback(item, context);
+  }, [openPlayback]);
 
   const closeModal = useCallback(() => {
     setIsOpen(false);
@@ -68,7 +78,16 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     };
   }, [isOpen]);
 
-  const value = { isOpen, mode, selectedItem, playbackContext, openDetails, openDemoPreview, closeModal };
+  const value = {
+    isOpen,
+    mode,
+    selectedItem,
+    playbackContext,
+    openDetails,
+    openPlayback,
+    openDemoPreview,
+    closeModal,
+  };
 
   return <ModalContext.Provider value={value}>{children}</ModalContext.Provider>;
 }

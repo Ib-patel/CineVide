@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { handleRoute, apiOk, apiError } from "@/server/http";
+import { handleRoute, apiOk, apiError, CATALOG_CACHE_HEADERS } from "@/server/http";
 import { getMediaBySlug } from "@/server/services/catalog";
 
 export async function GET(
@@ -12,7 +12,7 @@ export async function GET(
     if (!media) {
       return apiError(404, "NOT_FOUND", `Media with slug "${slug}" was not found.`);
     }
-    return apiOk(media);
+    return apiOk(media, { headers: CATALOG_CACHE_HEADERS });
   }, "GET /api/catalog/media/[slug]");
 }
 

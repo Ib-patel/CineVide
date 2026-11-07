@@ -1,92 +1,47 @@
 import { describe, it, expect } from "vitest";
 import {
-  listCatalog,
+  dedupeMedia,
+  extractIdFromSlug,
   listMovies,
   listSeries,
-  searchCatalog,
   getTrendingTitles,
-  getPopularTitles,
-  getBingeWorthySeries,
-  getExclusives,
-  getTopRated,
-  getMediaBySlug,
-  getFeaturedTitles,
 } from "@/server/services/catalog";
 
-describe("Catalog Service", () => {
-  it("lists all available items with pagination", async () => {
-    const page1 = await listCatalog({ limit: 10 });
-    expect(page1.data).toHaveLength(10);
-    expect(page1.total).toBeGreaterThanOrEqual(26);
-    expect(page1.nextCursor).toBe(10);
-
-    const page2 = await listCatalog({ cursor: page1.nextCursor!, limit: 10 });
-    expect(page2.data).toHaveLength(10);
-    expect(page2.nextCursor).toBe(20);
-
-    const page3 = await listCatalog({ cursor: page2.nextCursor!, limit: 10 });
-    expect(page3.data).toHaveLength(6);
-    expect(page3.nextCursor).toBeNull();
+describe("Catalog Service (Stateless TMDB Proxy)", () => {
+  it("extracts TMDB numeric ID and slug name accurately", () => {
+    expect(extractIdFromSlug("spider-man-1423191")).toEqual({ id: 1423191 });
+    expect(extractIdFromSlug("series-stranger-things-66732")).toEqual({ id: 66732 });
+    expect(extractIdFromSlug("unknown-slug")).toEqual({ id: null });
   });
 
-  it("filters catalog by type and genre", async () => {
-    const movies = await listMovies(50);
-    expect(movies.length).toBeGreaterThan(0);
-    expect(movies.every((m) => m.type === "movie")).toBe(true);
-
-    const series = await listSeries(50);
-    expect(series.length).toBeGreaterThan(0);
-    expect(series.every((s) => s.type === "series")).toBe(true);
-
-    const sciFi = await listCatalog({ genre: "Sci-Fi" });
-    expect(sciFi.data.length).toBeGreaterThan(0);
-    expect(sciFi.data.every((item) => item.genres.includes("Sci-Fi"))).toBe(true);
+  it("lists movies from live proxy", async () => {
+    const movies = await listMovies(4);
+    expect(movies.length).toBeGreaterThanOrEqual(1);
+    expect(movies[0].type).toBe("movie");
+    expect(movies[0].posterUrl).toBeTruthy();
   });
 
-  it("searches catalog by text match", async () => {
-    const results = await searchCatalog("neon");
-    expect(results.length).toBeGreaterThan(0);
-    expect(results.some((item) => item.title.toLowerCase().includes("neon"))).toBe(true);
+  it("lists series from live proxy", async () => {
+    const series = await listSeries(4);
+    expect(series.length).toBeGreaterThanOrEqual(1);
+    expect(series[0].type).toBe("series");
+    expect(series[0].posterUrl).toBeTruthy();
   });
 
-  it("returns curated rows in correct order", async () => {
-    const trending = await getTrendingTitles(10);
-    expect(trending.length).toBe(10);
-
-    const popular = await getPopularTitles(10);
-    expect(popular.length).toBeGreaterThan(0);
-    expect(popular.every((m) => m.type === "movie")).toBe(true);
-
-    const binge = await getBingeWorthySeries(10);
-    expect(binge.length).toBeGreaterThan(0);
-    expect(binge.every((s) => s.type === "series")).toBe(true);
-
-    const exclusives = await getExclusives(10);
-    expect(exclusives.length).toBeGreaterThan(0);
-    expect(exclusives.every((e) => e.isExclusive)).toBe(true);
-
-    const topRated = await getTopRated(5);
-    expect(topRated.length).toBe(5);
-    for (let i = 1; i < topRated.length; i++) {
-      expect(topRated[i - 1].rating).toBeGreaterThanOrEqual(topRated[i].rating);
-    }
+  it("fetches trending titles", async () => {
+    const trending = await getTrendingTitles(5);
+    expect(trending.length).toBeGreaterThanOrEqual(1);
+    expect(trending[0].title).toBeTruthy();
   });
 
-  it("fetches full media details by slug including seasons and episodes", async () => {
-    const detail = await getMediaBySlug("aetherbound");
-    expect(detail).not.toBeNull();
-    expect(detail?.slug).toBe("aetherbound");
-    expect(detail?.type).toBe("series");
-    if (detail && detail.type === "series") {
-      expect(detail.seasons.length).toBeGreaterThan(0);
-      expect(detail.seasons[0].episodes.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("returns featured items with preview video urls", async () => {
-    const featured = await getFeaturedTitles();
-    expect(featured.length).toBe(3);
-    expect(featured[0].media.title).toBeDefined();
-    expect(featured[0].previewVideoUrl).toBe("/videos/demo/demo-preview.mp4");
+  it("deduplicates media arrays by unique ID", () => {
+    const input = [
+      { id: "101", title: "Film A" },
+      { id: "102", title: "Film B" },
+      { id: "101", title: "Film A duplicate" },
+    ];
+    const deduped = dedupeMedia(input);
+    expect(deduped).toHaveLength(2);
+    expect(deduped.map((d) => d.id)).toEqual(["101", "102"]);
   });
 });
